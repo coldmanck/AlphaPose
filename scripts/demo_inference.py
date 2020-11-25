@@ -204,6 +204,7 @@ if __name__ == "__main__":
         else:
             video_save_opt['savepath'] = os.path.join(args.outputpath, 'AlphaPose_webcam' + str(input_source) + '.mp4')
         video_save_opt.update(det_loader.videoinfo)
+        # import pdb; pdb.set_trace()
         writer = DataWriter(cfg, args, save_video=True, video_save_opt=video_save_opt, queueSize=queueSize).start()
     else:
         writer = DataWriter(cfg, args, save_video=False, queueSize=queueSize).start()

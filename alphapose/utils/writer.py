@@ -22,12 +22,17 @@ EVAL_JOINTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
 
 class DataWriter():
-    def __init__(self, cfg, opt, save_video=False,
+    def __init__(self, cfg, opt, folder_idx, video_idx, save_video=False,
                  video_save_opt=DEFAULT_VIDEO_SAVE_OPT,
-                 queueSize=1024):
+                 queueSize=1024, use_detected_boxes=False):
+        self.use_detected_boxes = use_detected_boxes
+        
         self.cfg = cfg
         self.opt = opt
         self.video_save_opt = video_save_opt
+
+        self.folder_idx = folder_idx
+        self.video_idx = video_idx
 
         self.eval_joints = EVAL_JOINTS
         self.save_video = save_video
@@ -68,14 +73,18 @@ class DataWriter():
         if self.save_video:
             # initialize the file video stream, adapt ouput video resolution to original video
             stream = cv2.VideoWriter(*[self.video_save_opt[k] for k in ['savepath', 'fourcc', 'fps', 'frameSize']])
+            print(self.video_save_opt)
             if not stream.isOpened():
                 print("Try to use other video encoders...")
-                ext = self.video_save_opt['savepath'].split('.')[-1]
+                savepath = self.video_save_opt['savepath'].split('.')
+                name_without_ext, ext = ''.join(savepath[:-1]), savepath[-1]
                 fourcc, _ext = self.recognize_video_ext(ext)
                 self.video_save_opt['fourcc'] = fourcc
-                self.video_save_opt['savepath'] = self.video_save_opt['savepath'][:-4] + _ext
+                self.video_save_opt['savepath'] = name_without_ext + _ext # self.video_save_opt['savepath'][:-4] + _ext
+                print(self.video_save_opt)
                 stream = cv2.VideoWriter(*[self.video_save_opt[k] for k in ['savepath', 'fourcc', 'fps', 'frameSize']])
             assert stream.isOpened(), 'Cannot open video for writing'
+        
         # keep looping infinitelyd
         while True:
             # ensure the queue is not empty and get item
@@ -84,7 +93,11 @@ class DataWriter():
                 # if the thread indicator variable is set (img is None), stop the thread
                 if self.save_video:
                     stream.release()
-                write_json(final_result, self.opt.outputpath, form=self.opt.format, for_eval=self.opt.eval)
+                if self.opt.format != 'vidor':
+                    write_json(final_result, self.opt.outputpath, form=self.opt.format, for_eval=self.opt.eval, opt=self.opt)
+                else:
+                    json_savepath = os.path.join(self.opt.vidor_root, 'human_poses_detected-bboxes' if self.use_detected_boxes else 'human_poses', self.folder_idx, self.video_idx + '.json')
+                    write_json(final_result, json_savepath, form=self.opt.format, for_eval=self.opt.eval, opt=self.opt)
                 print("Results have been written to json.")
                 return
             # image channel RGB->BGR
@@ -110,12 +123,17 @@ class DataWriter():
                     pose_scores.append(torch.from_numpy(pose_score).unsqueeze(0))
                 preds_img = torch.cat(pose_coords)
                 preds_scores = torch.cat(pose_scores)
-                if not self.opt.pose_track:
+                if not self.opt.pose_track and self.opt.format != 'vidor':
                     boxes, scores, ids, preds_img, preds_scores, pick_ids = \
                         pose_nms(boxes, scores, ids, preds_img, preds_scores, self.opt.min_box_area)
+                if self.opt.format == 'vidor':
+                    boxes = boxes.cpu().tolist()
+                    scores = scores.cpu().tolist()
+                    ids = ids.cpu().tolist()
 
                 _result = []
                 for k in range(len(scores)):
+                    # print('len(scores):', len(scores), 'len(ids):', len(ids))
                     _result.append(
                         {
                             'keypoints':preds_img[k],
@@ -130,7 +148,8 @@ class DataWriter():
                     'imgname': im_name,
                     'result': _result
                 }
-
+                if self.opt.format == 'vidor':
+                    pass
 
                 if self.opt.pose_flow:
                     poseflow_result = self.pose_flow_wrapper.step(orig_img, result)
