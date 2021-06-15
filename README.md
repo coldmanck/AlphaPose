@@ -1,3 +1,6 @@
+**Note that this repo is a clone to [AlphaPose](https://github.com/MVIG-SJTU/AlphaPose) and only serves as supplementary codebase for generating human poses for [ST-HOI](https://github.com/coldmanck/VidHOI).**
+
+----
 
 <div align="center">
     <img src="docs/logo.jpg", width="400">
